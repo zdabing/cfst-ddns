@@ -39,6 +39,7 @@ import CronInput from '@/components/CronInput.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import FormItem from '@/components/FormItem.vue'
 import NumInput from '@/components/NumInput.vue'
+import NodeValidationFields from '@/components/NodeValidationFields.vue'
 import SettingRow from '@/components/SettingRow.vue'
 import SuggestInput from '@/components/SuggestInput.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
@@ -85,12 +86,19 @@ const DEFAULT_SPEED: SpeedTestConfig = {
   extraArgs: '',
 }
 
+const DEFAULT_VALIDATION = {
+  enabled: false, mihomoPath: 'mihomo', nodeFile: '',
+  testUrl: 'https://www.gstatic.com/generate_204', expectedStatus: 204,
+  timeoutMs: 8000, maxCandidates: 20, nameserver: 'system', interfaceName: '',
+}
+
 const form = reactive<TaskInput>({
   name: '',
   enabled: true,
   cron: '',
   ipType: 'v4',
   speedTest: { ...DEFAULT_SPEED },
+  nodeValidation: { ...DEFAULT_VALIDATION },
   update: { recordCount: 1, skipUnchanged: true },
   targets: [],
   notifierIds: [],
@@ -118,6 +126,7 @@ async function load() {
     form.cron = task.cron ?? ''
     form.ipType = task.ipType || 'v4'
     form.speedTest = { ...DEFAULT_SPEED, ...(task.speedTest ?? {}) }
+    form.nodeValidation = { ...DEFAULT_VALIDATION, ...(task.nodeValidation ?? {}) }
     form.update = Object.assign({ recordCount: 1, skipUnchanged: true }, task.update ?? {})
     form.targets = (task.targets ?? []).map((t) => ({ ...newTarget(), ...t }))
     form.notifierIds = [...(task.notifierIds ?? [])]
@@ -283,6 +292,12 @@ async function save() {
       minSpeed: n(st.minSpeed, 0),
     },
     update: { recordCount: n(form.update.recordCount, 1), skipUnchanged: form.update.skipUnchanged },
+    nodeValidation: {
+      ...form.nodeValidation,
+      expectedStatus: n(form.nodeValidation.expectedStatus, 204),
+      timeoutMs: n(form.nodeValidation.timeoutMs, 8000),
+      maxCandidates: n(form.nodeValidation.maxCandidates, 20),
+    },
     targets: form.targets.map((t) => ({
       accountId: t.accountId,
       domain: t.domain.trim().replace(/\.$/, ''),
@@ -459,6 +474,13 @@ async function save() {
               </CollapsibleContent>
             </Collapsible>
           </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2"><Settings2 class="text-muted-foreground size-4" />{{ $t('tasks.nodeValidation.title') }}</CardTitle>
+          </CardHeader>
+          <CardContent><NodeValidationFields v-model="form.nodeValidation" /></CardContent>
         </Card>
 
         <!-- 目标记录 -->

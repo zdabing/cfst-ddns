@@ -106,6 +106,17 @@ interface UpdatePolicy {
   recordCount: number    // 每种类型写入前 N 个 IP（多条同名记录），默认 1
   skipUnchanged: boolean // IP 未变化时不调用更新接口，默认 true
 }
+interface NodeValidationConfig {
+  enabled: boolean       // 默认 false；关闭时无需 Mihomo
+  mihomoPath: string      // 本机可执行文件路径或 PATH 名称，默认 mihomo
+  nodeFile: string        // 本机单节点 JSON / 单节点 JSON provider，启用时必填
+  testUrl: string         // 默认 https://www.gstatic.com/generate_204，仅 HTTPS
+  expectedStatus: number // 200–299，默认 204
+  timeoutMs: number       // 1000–30000，默认 8000
+  maxCandidates: number   // 1–100，默认 20；至少等于 recordCount
+  nameserver: string      // 默认 system，ECH 需支持 HTTPS DNS 记录
+  interfaceName: string   // 可选出口网卡，默认空（系统路由）
+}
 interface Target {
   accountId: number
   domain: string         // 主域名 example.com
@@ -117,7 +128,7 @@ interface Target {
 interface Task {
   id: number; name: string; enabled: boolean; cron: string  // 空字符串 = 仅手动
   ipType: IPType
-  speedTest: SpeedTestConfig; update: UpdatePolicy
+  speedTest: SpeedTestConfig; update: UpdatePolicy; nodeValidation: NodeValidationConfig
   targets: Target[]; notifierIds: number[]
   createdAt: string; updatedAt: string
   // 只读

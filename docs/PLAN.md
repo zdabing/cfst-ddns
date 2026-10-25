@@ -175,3 +175,14 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - ⚠ P9 品牌图标：DNSPod、Bark、Server 酱、PushPlus 为官网 favicon 位图（非矢量）；Gotify 图标为 CC BY 4.0（selfh.st），已在文件内注明。
 - ⚠ `network_mode: host` 在 Docker Desktop（Windows/macOS）上无效，测速结果会失真，文档需注明。
 - ⚠ 各云厂商 API 未用真实凭据验证时，仅保证签名与请求格式正确（单测），需用户用真实账号冒烟。
+
+## 6. 可选真实节点验证（2026-10-25）— ✅
+
+- [x] 在测速和 DNS 同步之间加入有界的真实 XHTTP 验证，保留原排序，失败跳过，未凑够写入数量则保留对应 A/AAAA 记录
+- [x] 复用本机 Mihomo、单节点 JSON 文件，保持 SNI/Host/ECH/Encryption/端口；不嵌入内核、不修改现有客户端，默认关闭
+- [x] 任务模型、API、网页表单、四语言文案、备份兼容与使用文档
+- [x] 流程测试覆盖候选回退、全部失败、候选上限、数量不足、试运行、内核故障、取消与临时文件回收
+- [x] `go vet ./...`、`go test ./...`、`pnpm build` 通过
+- [x] ARM64 验证器在实际路由器调用 Mihomo v1.19.33 完成 ECH/XHTTP 转发测试：拒绝一个不适用的候选，接受对照入口，测试结束回收进程和私有文件；未更改主客户端选择或实际 DNS
+
+部署说明见 [NODE_VALIDATION.md](NODE_VALIDATION.md)。代码功能已完成；实际自动任务需升级程序并按运行机器填写节点文件和内核路径。

@@ -23,6 +23,8 @@ cfst-ddns runs [CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest
 
 > v2 is a complete rewrite. Upgrading from v1 (the Bash scripts)? See the [migration guide](docs/MIGRATION.md) (Chinese), or import your old `config.sh` during first-time setup.
 
+Optional real XHTTP node validation before DNS updates: [setup and behavior](docs/NODE_VALIDATION.md). Reuse a local Mihomo executable; no extra runtime is required when disabled.
+
 ## Features
 
 - **Web UI**: dashboard, task management, live speed-test logs, run history and latency/speed trend charts; dark mode, mobile friendly, with brand logos for every provider and channel

@@ -14,6 +14,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
 	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/logbus"
+	"github.com/lonelyman0108/cfst-ddns/internal/nodecheck"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
@@ -249,6 +250,17 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	if count <= 0 {
 		count = 1
 	}
+	var checker *nodecheck.Checker
+	if task.NodeValidation.Enabled {
+		var err error
+		checker, err = nodecheck.New(task.NodeValidation, task.SpeedTest.Port)
+		if err != nil {
+			return fmt.Errorf("节点验证配置不可用，DNS 记录未修改: %w", err)
+		}
+		if task.NodeValidation.MaxCandidates > 0 && task.NodeValidation.MaxCandidates < count {
+			return errors.New("节点验证候选数量不能少于写入 IP 数量，DNS 记录未修改")
+		}
+	}
 
 	// 1. 测速
 	best := map[string][]string{} // ipType → 选中的 IP
@@ -273,10 +285,21 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 			rl.Printf("! IPv%s 没有满足条件的 IP，将保留现有记录", strings.TrimPrefix(t, "v"))
 			continue
 		}
-		for i := 0; i < len(res) && i < count; i++ {
-			best[t] = append(best[t], res[i].IP)
+		selected := res[:min(len(res), count)]
+		if checker != nil {
+			selected, err = checker.Filter(ctx, res, count, e.TempDir, rl)
+			if err != nil {
+				return fmt.Errorf("节点验证失败，DNS 记录未修改: %w", err)
+			}
+			if len(selected) < count {
+				rl.Printf("! IPv%s 仅 %d 个候选通过节点验证，不足所需 %d 个，保留现有记录", strings.TrimPrefix(t, "v"), len(selected), count)
+				continue
+			}
 		}
-		top := res[0]
+		for _, result := range selected {
+			best[t] = append(best[t], result.IP)
+		}
+		top := selected[0]
 		rl.Printf("✓ IPv%s 最优: %s  延迟 %.2f ms  速度 %.2f MB/s  地区 %s", strings.TrimPrefix(t, "v"), top.IP, top.Latency, top.Speed, top.Colo)
 		if t == "v4" {
 			run.BestIPv4 = top.IP
