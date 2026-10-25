@@ -130,6 +130,7 @@ async function create() {
     cron: tpl.value.cron,
     ipType: tpl.value.ipType,
     speedTest: { ...d.speedTest },
+    nodeValidation: { ...d.nodeValidation },
     update: { ...d.update, recordCount: form.recordCount || 1 },
     targets: [
       {

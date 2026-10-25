@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,9 +14,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
 	"github.com/lonelyman0108/cfst-ddns/internal/logbus"
+	"github.com/lonelyman0108/cfst-ddns/internal/nodecheck"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 	"github.com/lonelyman0108/cfst-ddns/internal/secret"
@@ -26,6 +29,10 @@ import (
 
 // 测试二进制在 FAKE_CFST=1 时扮演 cfst：把一条结果写入 -o 指定的文件。
 func TestMain(m *testing.M) {
+	if os.Getenv("FAKE_NODECHECK") == "1" && len(os.Args) > 1 && os.Args[1] == "-d" {
+		fakeMihomo()
+		os.Exit(0)
+	}
 	if os.Getenv("FAKE_CFST") == "1" {
 		for i, a := range os.Args {
 			if a == "-o" && i+1 < len(os.Args) {
@@ -140,5 +147,144 @@ func TestDryRun(t *testing.T) {
 	r = run(true)
 	if len(r.Results) != MaxStoredResults || r.ResultTotals["v4"] != 150 || r.Results[0].IP != "1.2.3.4" {
 		t.Fatalf("results=%d totals=%v first=%v", len(r.Results), r.ResultTotals, r.Results[0].IP)
+	}
+
+	// 完整流程：首个候选 TCP 合格但节点失败，只将下一个验证通过的 IP 写入 DNS。
+	t.Setenv("FAKE_CFST_ROWS", "3")
+	t.Setenv("FAKE_NODECHECK", "1")
+	t.Setenv("FAKE_NODECHECK_PASS", "1.2.0.2")
+	nodeFile := filepath.Join(dir, "node.json")
+	node := `{"type":"vless","server":"cdn.example.com","port":443,"uuid":"private-uuid","network":"xhttp","tls":true,"servername":"cdn.example.com","ech-opts":{"enable":true},"xhttp-opts":{"host":"cdn.example.com","path":"/private-path"}}`
+	if err := os.WriteFile(nodeFile, []byte(node), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	task.NodeValidation = nodecheck.Defaults()
+	task.NodeValidation.Enabled = true
+	task.NodeValidation.NodeFile = nodeFile
+	task.NodeValidation.MihomoPath = exe
+	task.NodeValidation.MaxCandidates = 3
+	if err := st.DB.Save(task).Error; err != nil {
+		t.Fatal(err)
+	}
+	r = run(false)
+	if r.Status != store.StatusSuccess || r.BestIPv4 != "1.2.0.2" || strings.Join(dryFake.values(), ",") != "1.2.0.2" {
+		t.Fatalf("validated selection failed: %+v DNS=%v", r, dryFake.values())
+	}
+	if strings.Contains(r.Log, "private-uuid") || strings.Contains(r.Log, "private-path") {
+		t.Fatal("credentials leaked into logs")
+	}
+	if r.BestLatency != 51 || r.BestSpeed != 1 {
+		t.Fatal("best metrics must describe validated IP", r.BestLatency, r.BestSpeed)
+	}
+
+	t.Setenv("FAKE_NODECHECK_PASS", "")
+	r = run(false)
+	if r.Status != store.StatusFailed || r.MessageKey != "noIP" || len(r.Changes) != 0 || strings.Join(dryFake.values(), ",") != "1.2.0.2" {
+		t.Fatalf("all rejected candidates must preserve DNS: %+v", r)
+	}
+
+	// 候选上限生效：第二名能用，但只验证第一名时不得写入第二名。
+	t.Setenv("FAKE_NODECHECK_PASS", "1.2.0.2")
+	task.NodeValidation.MaxCandidates = 1
+	st.DB.Save(task)
+	r = run(false)
+	if r.Status != store.StatusFailed || strings.Contains(r.Log, "节点验证 1.2.0.2 通过") {
+		t.Fatal("candidate limit ignored", r.Status, r.Log)
+	}
+	task.NodeValidation.MaxCandidates = 3
+	task.Update.RecordCount = 2
+	st.DB.Save(task)
+	r = run(false)
+	if r.Status != store.StatusFailed || len(r.Changes) != 0 || strings.Join(dryFake.values(), ",") != "1.2.0.2" {
+		t.Fatal("insufficient validated IPs must preserve DNS", r.Status)
+	}
+	task.Update.RecordCount = 1
+	st.DB.Save(task)
+	r = run(true)
+	if r.Status != store.StatusSuccess || r.BestIPv4 != "1.2.0.2" || len(r.Changes) != 0 {
+		t.Fatal("dry run must also validate without DNS writes", r.Status)
+	}
+
+	// 内核故障时关闭更新，不得回退到未验证的结果。
+	t.Setenv("FAKE_NODECHECK_MODE", "exit")
+	r = run(false)
+	if r.Status != store.StatusFailed || len(r.Changes) != 0 || strings.Contains(r.Log, "private-core-error") {
+		t.Fatal("core failure did not fail closed", r.Status)
+	}
+	t.Setenv("FAKE_NODECHECK_MODE", "hang")
+	id, err := e.Enqueue(task.ID, "manual", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	timer := time.AfterFunc(400*time.Millisecond, cancel)
+	defer timer.Stop()
+	e.execute(ctx, <-e.queue)
+	r = store.Run{}
+	st.DB.First(&r, id)
+	if r.Status != store.StatusCanceled || len(r.Changes) != 0 {
+		t.Fatal("cancellation failed", r.Status)
+	}
+	entries, _ := os.ReadDir(e.TempDir)
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "nodecheck-") {
+			t.Fatal("private temporary files left behind", entry.Name())
+		}
+	}
+}
+
+// fakeMihomo 作为真实子进程验证启动、控制器鉴权、候选替换和退出清理。
+func fakeMihomo() {
+	if os.Getenv("FAKE_NODECHECK_MODE") == "exit" {
+		fmt.Fprintln(os.Stderr, "private-core-error")
+		return
+	}
+	var file string
+	for i, a := range os.Args {
+		if a == "-f" && i+1 < len(os.Args) {
+			file = os.Args[i+1]
+		}
+	}
+	b, err := os.ReadFile(file)
+	if err != nil {
+		os.Exit(2)
+	}
+	var cfg struct {
+		Controller string           `json:"external-controller"`
+		Secret     string           `json:"secret"`
+		Proxies    []map[string]any `json:"proxies"`
+	}
+	if json.Unmarshal(b, &cfg) != nil {
+		os.Exit(3)
+	}
+	server := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+cfg.Secret {
+			w.WriteHeader(401)
+			return
+		}
+		if r.URL.Path == "/version" {
+			fmt.Fprint(w, `{"version":"fake"}`)
+			return
+		}
+		if os.Getenv("FAKE_NODECHECK_MODE") == "hang" {
+			<-r.Context().Done()
+			return
+		}
+		if r.URL.Query().Get("expected") != "204" || r.URL.Query().Get("url") != nodecheck.DefaultURL {
+			w.WriteHeader(400)
+			return
+		}
+		for _, p := range cfg.Proxies {
+			if r.URL.Path == "/proxies/"+p["name"].(string)+"/delay" && p["server"] == os.Getenv("FAKE_NODECHECK_PASS") {
+				fmt.Fprint(w, `{"delay":123}`)
+				return
+			}
+		}
+		w.WriteHeader(503)
+		fmt.Fprint(w, `{"message":"private-upstream-credential"}`)
+	})
+	if http.ListenAndServe(cfg.Controller, server) != nil {
+		os.Exit(4)
 	}
 }

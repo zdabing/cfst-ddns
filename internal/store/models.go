@@ -78,6 +78,20 @@ type UpdatePolicy struct {
 	SkipUnchanged bool `json:"skipUnchanged"`
 }
 
+// NodeValidationConfig 在写 DNS 前使用本机独立 Mihomo 进程验证真实节点。
+// 节点凭据只从 NodeFile 读取，不存入任务数据库或运行日志。
+type NodeValidationConfig struct {
+	Enabled        bool   `json:"enabled"`
+	MihomoPath     string `json:"mihomoPath"`
+	NodeFile       string `json:"nodeFile"`
+	TestURL        string `json:"testUrl"`
+	ExpectedStatus int    `json:"expectedStatus"`
+	TimeoutMs      int    `json:"timeoutMs"`
+	MaxCandidates  int    `json:"maxCandidates"`
+	Nameserver     string `json:"nameserver"`
+	InterfaceName  string `json:"interfaceName"`
+}
+
 // Target 为一条需要维护的 DNS 记录。
 type Target struct {
 	AccountID uint   `json:"accountId"`
@@ -90,17 +104,18 @@ type Target struct {
 
 // Task 为一个测速 + 更新任务。
 type Task struct {
-	ID          uint            `gorm:"primaryKey" json:"id"`
-	Name        string          `gorm:"size:128" json:"name"`
-	Enabled     bool            `json:"enabled"`
-	Cron        string          `gorm:"size:128" json:"cron"`
-	IPType      string          `gorm:"column:ip_type;size:8" json:"ipType"`
-	SpeedTest   SpeedTestConfig `gorm:"serializer:json" json:"speedTest"`
-	Update      UpdatePolicy    `gorm:"serializer:json" json:"update"`
-	Targets     []Target        `gorm:"serializer:json" json:"targets"`
-	NotifierIDs []uint          `gorm:"column:notifier_ids;serializer:json" json:"notifierIds"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	ID             uint                 `gorm:"primaryKey" json:"id"`
+	Name           string               `gorm:"size:128" json:"name"`
+	Enabled        bool                 `json:"enabled"`
+	Cron           string               `gorm:"size:128" json:"cron"`
+	IPType         string               `gorm:"column:ip_type;size:8" json:"ipType"`
+	SpeedTest      SpeedTestConfig      `gorm:"serializer:json" json:"speedTest"`
+	NodeValidation NodeValidationConfig `gorm:"serializer:json" json:"nodeValidation"`
+	Update         UpdatePolicy         `gorm:"serializer:json" json:"update"`
+	Targets        []Target             `gorm:"serializer:json" json:"targets"`
+	NotifierIDs    []uint               `gorm:"column:notifier_ids;serializer:json" json:"notifierIds"`
+	CreatedAt      time.Time            `json:"createdAt"`
+	UpdatedAt      time.Time            `json:"updatedAt"`
 }
 
 // 执行状态。

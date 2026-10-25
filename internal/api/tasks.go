@@ -11,6 +11,7 @@ import (
 
 	"github.com/lonelyman0108/cfst-ddns/internal/engine"
 	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
+	"github.com/lonelyman0108/cfst-ddns/internal/nodecheck"
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
@@ -30,9 +31,10 @@ func DefaultTask() store.Task {
 		IPType:  "v4",
 		SpeedTest: store.SpeedTestConfig{Threads: 200, PingTimes: 4, DownloadCount: 10, DownloadTime: 10,
 			Port: 443, MaxLatency: 9999, MaxLossRate: 1, IPSource: "default"},
-		Update:      store.UpdatePolicy{RecordCount: 1, SkipUnchanged: true},
-		Targets:     []store.Target{},
-		NotifierIDs: []uint{},
+		Update:         store.UpdatePolicy{RecordCount: 1, SkipUnchanged: true},
+		NodeValidation: nodecheck.Defaults(),
+		Targets:        []store.Target{},
+		NotifierIDs:    []uint{},
 	}
 }
 
@@ -51,6 +53,8 @@ func (s *Server) lastRuns() map[uint]*store.Run {
 
 func (s *Server) view(t store.Task, last map[uint]*store.Run) taskView {
 	_, running := s.Engine.Running(t.ID)
+	// 旧数据库/备份没有此字段时，也给编辑页显示有效的默认参数。
+	_ = nodecheck.Normalize(&t.NodeValidation)
 	if t.Targets == nil {
 		t.Targets = []store.Target{}
 	}
@@ -129,6 +133,19 @@ func normalizeTaskIn(st *store.Store, t *store.Task) error {
 	}
 	if t.Update.RecordCount > 10 {
 		return i18n.New("每种类型最多写入 10 条记录")
+	}
+	if err := nodecheck.Normalize(&t.NodeValidation); err != nil {
+		return err
+	}
+	if t.NodeValidation.Enabled {
+		if t.NodeValidation.MaxCandidates < t.Update.RecordCount {
+			return i18n.New("节点验证候选数量不能少于写入 IP 数量")
+		}
+		for _, target := range t.Targets {
+			if target.Proxied {
+				return i18n.New("节点验证的优选目标必须关闭 Cloudflare 代理（灰云）")
+			}
+		}
 	}
 	if len(t.Targets) == 0 {
 		return i18n.New("至少需要一条目标记录")

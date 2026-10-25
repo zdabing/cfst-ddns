@@ -23,6 +23,8 @@ cfst-ddns は [CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest)
 
 > v2 は完全に書き直されたバージョンです。v1（Bash スクリプト）からアップグレードする場合は [移行ガイド](docs/MIGRATION.md)（中国語）を参照するか、初回セットアップ時に旧 `config.sh` をインポートしてください。
 
+DNS 更新前の実際の XHTTP ノード検証に対応：[設定と動作](docs/NODE_VALIDATION.md)。ローカルの Mihomo を再利用し、必要数が合格しなければ DNS を保持します。無効時は追加コア不要です。
+
 ## 機能
 
 - **Web 画面**：ダッシュボード、タスク管理、リアルタイムの速度テストログ、実行履歴、レイテンシ/速度の推移グラフ。ダークモードとモバイルに対応し、各プロバイダーと通知チャネルにはブランドアイコンを表示

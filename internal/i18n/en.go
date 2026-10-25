@@ -2,6 +2,15 @@ package i18n
 
 // en 为English翻译，键为简体中文原文。
 var en = map[string]string{
+	// 可选真实节点验证
+	"节点验证需要填写本机节点文件路径":                "Node validation requires a local node file path",
+	"节点验证地址必须是无用户名和片段的 HTTPS URL":     "The validation URL must use HTTPS without user information or a fragment",
+	"节点验证期望状态码需在 200-299 之间":          "The expected validation status must be between 200 and 299",
+	"节点验证超时需在 1000-30000 毫秒之间":        "The validation timeout must be between 1000 and 30000 ms",
+	"节点验证候选数量需在 1-100 之间":             "The validation candidate limit must be between 1 and 100",
+	"节点验证候选数量不能少于写入 IP 数量":            "The candidate limit must not be less than the DNS record count",
+	"节点验证的优选目标必须关闭 Cloudflare 代理（灰云）": "Node validation DNS targets must have Cloudflare proxying disabled (DNS only)",
+
 	// DNS 服务商表单
 	"认证方式":          "Authentication",
 	"API Token（推荐）": "API Token (recommended)",

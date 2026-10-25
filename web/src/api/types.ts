@@ -177,6 +177,18 @@ export interface UpdatePolicy {
   skipUnchanged: boolean
 }
 
+export interface NodeValidationConfig {
+  enabled: boolean
+  mihomoPath: string
+  nodeFile: string
+  testUrl: string
+  expectedStatus: number
+  timeoutMs: number
+  maxCandidates: number
+  nameserver: string
+  interfaceName: string
+}
+
 export interface Target {
   accountId: number
   domain: string
@@ -194,6 +206,7 @@ export interface Task {
   cron: string
   ipType: IPType
   speedTest: SpeedTestConfig
+  nodeValidation: NodeValidationConfig
   update: UpdatePolicy
   targets: Target[]
   notifierIds: number[]
@@ -207,7 +220,7 @@ export interface Task {
 
 export type TaskInput = Pick<
   Task,
-  'name' | 'enabled' | 'cron' | 'ipType' | 'speedTest' | 'update' | 'targets' | 'notifierIds'
+  'name' | 'enabled' | 'cron' | 'ipType' | 'speedTest' | 'nodeValidation' | 'update' | 'targets' | 'notifierIds'
 >
 
 export interface RunStarted {
